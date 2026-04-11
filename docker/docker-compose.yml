@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  api:
+    build: ..
+    command: uvicorn agentforge.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports: ["8000:8000"]
+    env_file: ../.env
+    depends_on: [postgres, redis, chroma]
+    volumes: ["..:/app"]
+    networks: [agentforge]
+
+  worker:
+    build: ..
+    command: celery -A agentforge.core.tasks worker --loglevel=info -c 4
+    env_file: ../.env
+    depends_on: [postgres, redis]
+    networks: [agentforge]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: agentforge
+      POSTGRES_USER: agentforge
+      POSTGRES_PASSWORD: secret
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [agentforge]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    networks: [agentforge]
+
+  chroma:
+    image: chromadb/chroma:latest
+    ports: ["8001:8001"]
+    volumes: [chromadata:/chroma/chroma]
+    networks: [agentforge]
+
+  frontend:
+    build: ../frontend
+    ports: ["3000:3000"]
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    networks: [agentforge]
+
+volumes:
+  pgdata:
+  chromadata:
+
+networks:
+  agentforge:
+    driver: bridge
