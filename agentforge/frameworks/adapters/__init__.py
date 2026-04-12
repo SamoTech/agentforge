@@ -1,11 +1,12 @@
-"""Unified framework adapter interface."""
+"""Framework adapters — unified interface over LangChain, AutoGen, CrewAI, LlamaIndex."""
 from agentforge.frameworks.adapters.langchain_adapter import LangChainAdapter
 from agentforge.frameworks.adapters.autogen_adapter import AutoGenAdapter
 from agentforge.frameworks.adapters.crewai_adapter import CrewAIAdapter
+from agentforge.frameworks.adapters.llama_index_adapter import LlamaIndexAdapter
 
-ADAPTERS = {'langchain': LangChainAdapter, 'autogen': AutoGenAdapter, 'crewai': CrewAIAdapter}
-
-def get_adapter(framework: str):
-    cls = ADAPTERS.get(framework)
-    if not cls: raise ValueError(f'Unknown framework: {framework}. Available: {list(ADAPTERS)}')
-    return cls()
+__all__ = [
+    "LangChainAdapter",
+    "AutoGenAdapter",
+    "CrewAIAdapter",
+    "LlamaIndexAdapter",
+]
