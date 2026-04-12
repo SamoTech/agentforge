@@ -57,7 +57,9 @@ class OCRSkill(BaseSkill):
         try:
             import pytesseract
             from PIL import Image
-            import io, base64, httpx
+            import io
+            import base64
+            import httpx
             if image_url:
                 async with httpx.AsyncClient(timeout=15) as c:
                     r = await c.get(image_url)

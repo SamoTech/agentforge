@@ -40,6 +40,8 @@ jobs:
           SECRET_KEY: test-secret
           JWT_SECRET: test-jwt
           OPENAI_API_KEY: sk-test
+          PGUSER: agentforge
+          PGPASSWORD: secret
       - uses: codecov/codecov-action@v4
         with:
           file: coverage.xml

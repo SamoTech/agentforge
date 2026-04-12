@@ -188,8 +188,8 @@ class WebScraperSkill(BaseSkill):
             all_links = self._extract_links(soup, url)
             result["links"] = all_links
             base_domain = urlparse(url).netloc
-            result["internal_links"] = [l for l in all_links if urlparse(l["url"]).netloc == base_domain]
-            result["external_links"] = [l for l in all_links if urlparse(l["url"]).netloc != base_domain]
+            result["internal_links"] = [link for link in all_links if urlparse(link["url"]).netloc == base_domain]
+            result["external_links"] = [link for link in all_links if urlparse(link["url"]).netloc != base_domain]
 
         if extract_images:
             result["images"] = self._extract_images(soup, url)
@@ -197,8 +197,8 @@ class WebScraperSkill(BaseSkill):
         if follow_links and max_depth > 1:
             child_links = self._extract_links(soup, url)
             same_domain = [
-                l["url"] for l in child_links
-                if urlparse(l["url"]).netloc == urlparse(url).netloc
+                link["url"] for link in child_links
+                if urlparse(link["url"]).netloc == urlparse(url).netloc
             ][:5]
             child_results = await asyncio.gather(
                 *[self._execute(child_url, max_depth=max_depth - 1) for child_url in same_domain],

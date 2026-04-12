@@ -15,12 +15,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     try:
         payload = decode_token(token)
         user_id = payload.get('sub')
-        if not user_id: raise exc
-    except ValueError: raise exc
+        if not user_id:
+            raise exc
+    except ValueError:
+        raise exc
     user = await db.get(User, uuid.UUID(user_id))
-    if not user or not user.is_active: raise exc
+    if not user or not user.is_active:
+        raise exc
     return user
 
 async def get_current_admin(user: User = Depends(get_current_user)) -> User:
-    if not user.is_admin: raise HTTPException(403, 'Admin access required')
+    if not user.is_admin:
+        raise HTTPException(403, 'Admin access required')
     return user

@@ -88,13 +88,8 @@ class HttpRequestSkill(BaseSkill):
             req_kwargs["content"] = body.encode()
 
         # ── Retry loop ────────────────────────────────────────────────────
-        from tenacity import (
-            retry, stop_after_attempt, wait_exponential,
-            retry_if_exception_type, RetryError,
-        )
         import time
 
-        attempts  = 0
         last_err  = None
 
         async def _do_request() -> httpx.Response:

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Any
 from agentforge.agents.base import BaseAgent, AgentResult
-from agentforge.skills.base import BaseSkill, SkillInput
+from agentforge.skills.base import SkillInput
 
 
 class ExecutorAgent(BaseAgent):
