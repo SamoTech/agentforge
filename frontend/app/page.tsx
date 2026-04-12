@@ -1,9 +1,9 @@
-import { redirect } from 'next/navigation'
+import { redirect } from "next/navigation";
 
 /**
- * Root page — redirect straight to the dashboard.
- * Auth guard lives inside the dashboard layout.
+ * Root page — redirect to the dashboard.
+ * All UI lives under /dashboard to keep the app shell consistent.
  */
 export default function RootPage() {
-  redirect('/dashboard')
+  redirect("/dashboard");
 }

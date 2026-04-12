@@ -1,24 +1,32 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Proxy API calls to the FastAPI backend during development
+  reactStrictMode: true,
+
+  // Forward API requests to the FastAPI backend
   async rewrites() {
     return [
       {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/:path*`,
+        source: "/api/:path*",
+        destination: `${process.env.BACKEND_URL ?? "http://localhost:8000"}/api/:path*`,
       },
-    ]
+      {
+        source: "/ws/:path*",
+        destination: `${process.env.BACKEND_WS_URL ?? "ws://localhost:8000"}/ws/:path*`,
+      },
+    ];
   },
 
-  // Allow images from any HTTPS source (adjust to lock down in prod)
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
+      { protocol: "https", hostname: "avatars.githubusercontent.com" },
+      { protocol: "https", hostname: "github.com" },
     ],
   },
-}
 
-module.exports = nextConfig
+  // Enable React Server Components streaming
+  experimental: {
+    serverActions: { allowedOrigins: ["localhost:3000"] },
+  },
+};
+
+module.exports = nextConfig;
