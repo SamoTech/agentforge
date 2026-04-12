@@ -10,7 +10,6 @@ class LangChainAdapter:
         """Wrap a BaseSkill as a LangChain StructuredTool."""
         try:
             from langchain.tools import StructuredTool
-            import asyncio
 
             async def _run(**kwargs: Any) -> str:
                 result = await skill.execute(SkillInput(data=kwargs))

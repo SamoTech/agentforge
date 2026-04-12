@@ -32,7 +32,7 @@ class GitHubSkill(BaseSkill):
                 return SkillOutput.ok([{'number': i['number'], 'title': i['title'], 'state': i['state']} for i in r.json()])
             elif action == 'search_repos':
                 q = input.data.get('query', '')
-                r = await client.get(f'https://api.github.com/search/repositories', params={'q': q, 'per_page': 5})
+                r = await client.get('https://api.github.com/search/repositories', params={'q': q, 'per_page': 5})
                 r.raise_for_status()
                 return SkillOutput.ok([{'name': i['full_name'], 'description': i['description'], 'stars': i['stargazers_count']} for i in r.json().get('items', [])])
             else:

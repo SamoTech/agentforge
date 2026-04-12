@@ -14,7 +14,8 @@ class CodeGeneratorSkill(BaseSkill):
         prompt = input.data.get('prompt', '')
         language = input.data.get('language', 'python')
         task = input.data.get('task', 'generate')  # generate | refactor | explain | review
-        if not prompt: return SkillOutput.fail('prompt is required')
+        if not prompt:
+            return SkillOutput.fail('prompt is required')
 
         system_map = {
             'generate': f'You are an expert {language} developer. Write clean, production-ready code with error handling and docstrings. Return only the code block.',

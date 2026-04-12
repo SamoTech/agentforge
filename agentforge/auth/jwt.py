@@ -15,5 +15,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 def decode_token(token: str) -> dict:
-    try: return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except JWTError as e: raise ValueError(f'Invalid token: {e}') from e
+    try:
+        return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError as e:
+        raise ValueError(f'Invalid token: {e}') from e

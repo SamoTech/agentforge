@@ -17,12 +17,14 @@ class EmailSkill(BaseSkill):
         subject = input.data.get('subject', '')
         body = input.data.get('body', '')
         html = input.data.get('html', False)
-        if not all([to, subject, body]): return SkillOutput.fail('to, subject, and body are required')
+        if not all([to, subject, body]):
+            return SkillOutput.fail('to, subject, and body are required')
         smtp_host = getattr(settings, 'smtp_host', 'smtp.gmail.com')
         smtp_port = getattr(settings, 'smtp_port', 587)
         smtp_user = getattr(settings, 'smtp_user', '')
         smtp_pass = getattr(settings, 'smtp_password', '')
-        if not smtp_user: return SkillOutput.fail('SMTP credentials not configured')
+        if not smtp_user:
+            return SkillOutput.fail('SMTP credentials not configured')
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
         msg['From'] = smtp_user

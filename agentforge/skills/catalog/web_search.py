@@ -7,7 +7,7 @@ Features: multi-provider (DuckDuckGo free, Tavily, Brave, SerpAPI),
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -171,6 +171,8 @@ class WebSearchSkill(BaseSkill):
         time_range: str = "",
         **kwargs,
     ) -> Any:
+        if not query:
+            return {"error": "query is required"}
         if provider == "auto":
             provider = self._select_provider()
 

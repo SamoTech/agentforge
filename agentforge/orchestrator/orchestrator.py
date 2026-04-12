@@ -2,7 +2,6 @@
 from __future__ import annotations
 import json
 from dataclasses import dataclass, field
-from typing import Any
 from openai import AsyncOpenAI
 from agentforge.core.config import settings
 from agentforge.core.logger import logger
@@ -77,7 +76,6 @@ class Orchestrator:
         )
         messages: list[dict] = [{"role": "system", "content": system_msg}]
 
-        # Inject prior conversation turns so the planner has full context
         if context:
             messages.extend(context)
 

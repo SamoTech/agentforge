@@ -1,5 +1,7 @@
 """Sandboxed Python code execution skill."""
-import ast, sys, io, traceback
+import ast
+import io
+import traceback
 from typing import Any
 from agentforge.skills.base import BaseSkill, SkillInput, SkillOutput
 from agentforge.skills.registry import register
@@ -35,6 +37,7 @@ class CodeExecutorSkill(BaseSkill):
 
     async def execute(self, input: SkillInput) -> SkillOutput:
         code = input.data.get('code', '')
-        if not code: return SkillOutput.fail('code is required')
+        if not code:
+            return SkillOutput.fail('code is required')
         stdout, stderr, variables = _safe_exec(code)
         return SkillOutput.ok({'stdout': stdout, 'stderr': stderr, 'variables': {k: str(v) for k, v in variables.items()}})

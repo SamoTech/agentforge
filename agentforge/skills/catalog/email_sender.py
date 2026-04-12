@@ -71,8 +71,10 @@ class EmailSenderSkill(BaseSkill):
             msg["To"]       = to
             msg["Date"]     = formatdate(localtime=True)
             msg["Message-ID"] = make_msgid(domain=from_addr.split("@")[-1])
-            if cc:        msg["Cc"]       = cc
-            if reply_to:  msg["Reply-To"] = reply_to
+            if cc:
+                msg["Cc"] = cc
+            if reply_to:
+                msg["Reply-To"] = reply_to
 
             # Body part
             alt = MIMEMultipart("alternative")
@@ -94,8 +96,10 @@ class EmailSenderSkill(BaseSkill):
 
             # Build recipient list including BCC
             all_rcpt = [r.strip() for r in to.split(",")]
-            if cc:  all_rcpt += [r.strip() for r in cc.split(",")]
-            if bcc: all_rcpt += [r.strip() for r in bcc.split(",")]
+            if cc:
+                all_rcpt += [r.strip() for r in cc.split(",")]
+            if bcc:
+                all_rcpt += [r.strip() for r in bcc.split(",")]
 
             with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as srv:
                 srv.ehlo()
@@ -108,7 +112,6 @@ class EmailSenderSkill(BaseSkill):
             return msg["Message-ID"]
 
         try:
-            # Run blocking SMTP in thread pool so async event loop is never blocked
             msg_id = await asyncio.get_event_loop().run_in_executor(None, _build_and_send)
             recipients = len([r.strip() for r in to.split(",")])
             return SkillOutput(data={"sent": True, "message_id": msg_id, "recipients": recipients})

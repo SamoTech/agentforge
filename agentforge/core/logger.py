@@ -1,5 +1,7 @@
 """Structured JSON logging via structlog."""
-import structlog, logging
+import logging
+import structlog
+
 logging.basicConfig(format='%(message)s', level=logging.INFO)
 structlog.configure(
     processors=[

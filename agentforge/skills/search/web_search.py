@@ -12,7 +12,8 @@ class WebSearchSkill(BaseSkill):
     async def execute(self, input: SkillInput) -> SkillOutput:
         query = input.data.get('query', '')
         num_results = input.data.get('num_results', 5)
-        if not query: return SkillOutput.fail('query is required')
+        if not query:
+            return SkillOutput.fail('query is required')
 
         # Try DuckDuckGo Instant Answer API (no key required)
         try:

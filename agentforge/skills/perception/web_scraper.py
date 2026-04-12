@@ -11,7 +11,8 @@ class WebScraperSkill(BaseSkill):
 
     async def execute(self, input: SkillInput) -> SkillOutput:
         url = input.data.get('url')
-        if not url: return SkillOutput.fail('url is required')
+        if not url:
+            return SkillOutput.fail('url is required')
         try:
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 response = await client.get(url, headers={'User-Agent': 'AgentForge/1.0'})
