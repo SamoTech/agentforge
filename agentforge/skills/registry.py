@@ -1,97 +1,152 @@
-"""Skill Registry — register, discover, and search skills at scale (10,000+)."""
+"""
+Advanced Skill Registry
+Features: hot reload, versioning, category filtering, health checks, OpenAI tool export
+"""
 from __future__ import annotations
+
 import importlib
+import importlib.util
+import inspect
+import logging
 import pkgutil
+import sys
 from pathlib import Path
-from typing import Iterator
-from agentforge.skills.base import BaseSkill
-from agentforge.core.logger import logger
+from typing import Optional, Type
+
+from agentforge.skills.base import BaseSkill, SkillCategory
+
+logger = logging.getLogger(__name__)
 
 
 class SkillRegistry:
-    """Thread-safe, in-memory skill registry with fuzzy search.
-
-    Scales to 10,000+ skills via lazy loading and an optional
-    vector-backed search (plug in ChromaDB for semantic search).
+    """
+    Central registry for all AgentForge skills.
+    Supports: hot reload, versioning, category filtering, OpenAI tool export.
     """
 
-    def __init__(self) -> None:
-        self._skills: dict[str, BaseSkill] = {}
-        self._by_category: dict[str, list[str]] = {}
-        self._by_tag: dict[str, list[str]] = {}
+    def __init__(self):
+        self._skills: dict[str, Type[BaseSkill]] = {}
+        self._instances: dict[str, BaseSkill] = {}
+        self._loaded_modules: set[str] = set()
 
-    # ── Registration ──────────────────────────────────────────────────────
+    def register(self, skill_class: Type[BaseSkill]) -> Type[BaseSkill]:
+        """Register a skill class. Can be used as a decorator."""
+        if not issubclass(skill_class, BaseSkill):
+            raise TypeError(f"{skill_class} must inherit from BaseSkill")
+        name = skill_class.name
+        if name in self._skills:
+            existing_ver = self._skills[name].version
+            new_ver = skill_class.version
+            if new_ver > existing_ver:
+                logger.info(f"Upgrading skill '{name}' {existing_ver} -> {new_ver}")
+            else:
+                logger.debug(f"Skill '{name}' already registered, skipping")
+                return skill_class
+        self._skills[name] = skill_class
+        logger.info(f"Registered skill: {name} v{skill_class.version}")
+        return skill_class
 
-    def register(self, skill: BaseSkill) -> None:
-        if skill.name in self._skills:
-            logger.warning("skill_overwrite", name=skill.name)
-        self._skills[skill.name] = skill
-        self._by_category.setdefault(skill.category, []).append(skill.name)
-        for tag in skill.tags:
-            self._by_tag.setdefault(tag, []).append(skill.name)
-        logger.debug("skill_registered", name=skill.name, category=skill.category)
+    def get(self, name: str) -> BaseSkill:
+        """Get a singleton instance of a skill by name."""
+        if name not in self._skills:
+            raise KeyError(
+                f"Skill '{name}' not found. Available: {list(self._skills.keys())}"
+            )
+        if name not in self._instances:
+            self._instances[name] = self._skills[name]()
+        return self._instances[name]
 
-    def register_many(self, skills: list[BaseSkill]) -> None:
-        for s in skills:
-            self.register(s)
+    def get_class(self, name: str) -> Type[BaseSkill]:
+        if name not in self._skills:
+            raise KeyError(f"Skill '{name}' not found")
+        return self._skills[name]
 
-    def auto_discover(self, package: str = "agentforge.skills.catalog") -> int:
-        """Import every module in a package and auto-register BaseSkill subclasses."""
-        pkg = importlib.import_module(package)
-        pkg_path = Path(pkg.__file__).parent
-        count = 0
-        for _, mod_name, _ in pkgutil.iter_modules([str(pkg_path)]):
-            mod = importlib.import_module(f"{package}.{mod_name}")
-            for attr_name in dir(mod):
-                attr = getattr(mod, attr_name)
-                if (
-                    isinstance(attr, type)
-                    and issubclass(attr, BaseSkill)
-                    and attr is not BaseSkill
-                    and hasattr(attr, "name")
-                ):
-                    try:
-                        self.register(attr())
-                        count += 1
-                    except Exception as e:
-                        logger.error("skill_auto_register_fail", attr=attr_name, error=str(e))
-        logger.info("auto_discover_complete", count=count, package=package)
-        return count
+    def list_all(self) -> list[dict]:
+        return [
+            {
+                "name": cls.name,
+                "description": cls.description,
+                "category": cls.category,
+                "version": cls.version,
+                "tags": cls.tags,
+            }
+            for cls in self._skills.values()
+        ]
 
-    # ── Lookup ─────────────────────────────────────────────────────────────
+    def list_by_category(self, category: SkillCategory) -> list[dict]:
+        return [s for s in self.list_all() if s["category"] == category]
 
-    def get(self, name: str) -> BaseSkill | None:
-        return self._skills.get(name)
+    def search(self, query: str) -> list[dict]:
+        query = query.lower()
+        return [
+            s
+            for s in self.list_all()
+            if query in s["name"].lower()
+            or query in s["description"].lower()
+            or any(query in t.lower() for t in s.get("tags", []))
+        ]
 
-    def list_all(self) -> list[BaseSkill]:
-        return list(self._skills.values())
+    def to_openai_tools(self, names: Optional[list[str]] = None) -> list[dict]:
+        """Export skills as OpenAI tool specs for function calling."""
+        targets = names or list(self._skills.keys())
+        return [
+            self._skills[n].to_openai_tool()
+            for n in targets
+            if n in self._skills
+        ]
 
-    def list_category(self, category: str) -> list[BaseSkill]:
-        names = self._by_category.get(category, [])
-        return [self._skills[n] for n in names if n in self._skills]
+    def auto_discover(self, package_path: Optional[str] = None):
+        """Auto-discover and register all skills in the catalog."""
+        if package_path is None:
+            catalog_path = Path(__file__).parent / "catalog"
+        else:
+            catalog_path = Path(package_path)
 
-    def list_tags(self, tag: str) -> list[BaseSkill]:
-        names = self._by_tag.get(tag, [])
-        return [self._skills[n] for n in names if n in self._skills]
+        for module_info in pkgutil.iter_modules([str(catalog_path)]):
+            module_name = f"agentforge.skills.catalog.{module_info.name}"
+            if module_name in self._loaded_modules:
+                continue
+            try:
+                module = importlib.import_module(module_name)
+                for _, obj in inspect.getmembers(module, inspect.isclass):
+                    if (
+                        issubclass(obj, BaseSkill)
+                        and obj is not BaseSkill
+                        and hasattr(obj, "name")
+                        and obj.name != "base_skill"
+                    ):
+                        self.register(obj)
+                self._loaded_modules.add(module_name)
+            except Exception as e:
+                logger.error(f"Failed to load skill module '{module_name}': {e}")
 
-    # ── Search (keyword — plug in vector DB for semantic search) ──────────
+    def hot_reload(self, skill_name: str):
+        """Reload a specific skill module from disk."""
+        if skill_name in self._instances:
+            del self._instances[skill_name]
+        for mod_name in list(self._loaded_modules):
+            if skill_name in mod_name:
+                self._loaded_modules.discard(mod_name)
+                if mod_name in sys.modules:
+                    del sys.modules[mod_name]
+        self.auto_discover()
+        logger.info(f"Hot-reloaded skill: {skill_name}")
 
-    def search(self, query: str, limit: int = 20) -> list[BaseSkill]:
-        q = query.lower()
-        scored: list[tuple[int, BaseSkill]] = []
-        for skill in self._skills.values():
-            score = 0
-            if q in skill.name:            score += 10
-            if q in skill.description.lower(): score += 5
-            if any(q in t for t in skill.tags): score += 3
-            if q in skill.category:        score += 2
-            if score:
-                scored.append((score, skill))
-        scored.sort(key=lambda x: -x[0])
-        return [s for _, s in scored[:limit]]
+    def health_check(self) -> dict:
+        stats = {}
+        for name, instance in self._instances.items():
+            stats[name] = instance.get_stats()
+        return {
+            "total_registered": len(self._skills),
+            "total_instantiated": len(self._instances),
+            "skill_stats": stats,
+        }
 
-    def __len__(self) -> int:
-        return len(self._skills)
+    def unregister(self, name: str):
+        self._skills.pop(name, None)
+        self._instances.pop(name, None)
+        logger.info(f"Unregistered skill: {name}")
 
-    def __iter__(self) -> Iterator[BaseSkill]:
-        return iter(self._skills.values())
+
+# Global singleton
+registry = SkillRegistry()
