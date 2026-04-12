@@ -1,72 +1,118 @@
-"""LlamaIndex adapter — wrap AgentForge skills as LlamaIndex FunctionTools."""
+"""
+LlamaIndex Framework Adapter
+Bridges AgentForge skills with LlamaIndex tools and query engines.
+"""
 from __future__ import annotations
-from typing import Any
-from agentforge.skills.base import BaseSkill, SkillInput
+
+import logging
+from typing import Any, Optional
+
+from agentforge.skills.base import BaseSkill
+from agentforge.skills.registry import registry
+
+logger = logging.getLogger(__name__)
 
 
 class LlamaIndexAdapter:
-    """Adapts AgentForge BaseSkill instances into LlamaIndex FunctionTool objects.
+    """
+    Wraps AgentForge skills as LlamaIndex FunctionTool objects.
+    Enables AgentForge skills to be used inside LlamaIndex agents and pipelines.
 
-    Usage::
-
-        from agentforge.frameworks.adapters.llama_index_adapter import LlamaIndexAdapter
-        from agentforge.skills.catalog.web_search import WebSearchSkill
-
-        tool = LlamaIndexAdapter.to_tool(WebSearchSkill())
-        # tool is now a llama_index.core.tools.FunctionTool
+    Usage:
+        adapter = LlamaIndexAdapter()
+        tools = adapter.get_tools(["web_search", "web_scraper"])
+        agent = ReActAgent.from_tools(tools, llm=llm)
     """
 
-    @staticmethod
-    def to_tool(skill: BaseSkill) -> Any:
-        """Convert a single BaseSkill to a LlamaIndex FunctionTool."""
+    def __init__(self):
         try:
-            from llama_index.core.tools import FunctionTool
-        except ImportError as exc:
-            raise ImportError(
-                "llama-index-core is required for the LlamaIndex adapter. "
-                "Install it with: pip install llama-index-core"
-            ) from exc
+            import llama_index  # noqa: F401
+            self._available = True
+        except ImportError:
+            self._available = False
+            logger.warning("llama_index not installed. Run: pip install llama-index")
 
+    def _check_available(self):
+        if not self._available:
+            raise RuntimeError(
+                "llama_index is not installed. "
+                "Install with: pip install llama-index"
+            )
+
+    def skill_to_function_tool(self, skill: BaseSkill):
+        """
+        Convert a single AgentForge BaseSkill to a LlamaIndex FunctionTool.
+        """
+        self._check_available()
+        from llama_index.core.tools import FunctionTool
         import asyncio
 
-        async def _async_fn(**kwargs: Any) -> str:
-            result = await skill.execute(SkillInput(data=kwargs))
-            if not result.success:
-                return f"Error: {result.error}"
-            return str(result.data)
+        skill_name = skill.name
+        skill_desc = skill.description
 
-        def _sync_fn(**kwargs: Any) -> str:
-            return asyncio.get_event_loop().run_until_complete(_async_fn(**kwargs))
+        async def _tool_fn(**kwargs) -> str:
+            result = await skill.execute(**kwargs)
+            if result.success:
+                return str(result.data)
+            return f"Error: {result.error}"
+
+        def _sync_tool_fn(**kwargs) -> str:
+            return asyncio.get_event_loop().run_until_complete(_tool_fn(**kwargs))
 
         return FunctionTool.from_defaults(
-            fn=_sync_fn,
-            async_fn=_async_fn,
-            name=skill.name,
-            description=skill.description,
+            fn=_sync_tool_fn,
+            async_fn=_tool_fn,
+            name=skill_name,
+            description=skill_desc,
         )
 
-    @staticmethod
-    def to_tools(skills: list[BaseSkill]) -> list[Any]:
-        """Convert a list of BaseSkill instances to LlamaIndex FunctionTools."""
-        return [LlamaIndexAdapter.to_tool(s) for s in skills]
-
-    @staticmethod
-    def build_query_engine(skills: list[BaseSkill], llm: Any | None = None) -> Any:
-        """Build a LlamaIndex ReActAgent backed by AgentForge skills.
-
-        Args:
-            skills: List of AgentForge skills to expose.
-            llm:    Optional LlamaIndex LLM instance. Falls back to OpenAI default.
-
-        Returns:
-            A llama_index.core.agent.ReActAgent ready to run tasks.
+    def get_tools(self, skill_names: Optional[list[str]] = None) -> list:
         """
-        try:
-            from llama_index.core.agent import ReActAgent
-        except ImportError as exc:
-            raise ImportError(
-                "llama-index-core is required. Install with: pip install llama-index-core"
-            ) from exc
+        Get LlamaIndex FunctionTool objects for the specified skills.
+        If skill_names is None, returns tools for all registered skills.
+        """
+        self._check_available()
+        names = skill_names or [s["name"] for s in registry.list_all()]
+        tools = []
+        for name in names:
+            try:
+                skill = registry.get(name)
+                tools.append(self.skill_to_function_tool(skill))
+            except Exception as e:
+                logger.error(f"Failed to convert skill '{name}' to LlamaIndex tool: {e}")
+        return tools
 
-        tools = LlamaIndexAdapter.to_tools(skills)
+    def create_query_engine_tool(self, skill_name: str, description: Optional[str] = None):
+        """
+        Wrap a skill as a LlamaIndex QueryEngineTool for use in agent pipelines.
+        """
+        self._check_available()
+        from llama_index.core.tools import QueryEngineTool, ToolMetadata
+
+        skill = registry.get(skill_name)
+
+        class SkillQueryEngine:
+            def query(self, query_str: str) -> Any:
+                import asyncio
+                result = asyncio.get_event_loop().run_until_complete(
+                    skill.execute(query=query_str)
+                )
+                return result.data if result.success else result.error
+
+        return QueryEngineTool(
+            query_engine=SkillQueryEngine(),
+            metadata=ToolMetadata(
+                name=skill_name,
+                description=description or skill.description,
+            ),
+        )
+
+    def create_react_agent(self, skill_names: Optional[list[str]] = None, llm=None):
+        """
+        Create a LlamaIndex ReAct agent backed by AgentForge skills.
+        """
+        self._check_available()
+        from llama_index.core.agent import ReActAgent
+
+        tools = self.get_tools(skill_names)
         return ReActAgent.from_tools(tools, llm=llm, verbose=True)

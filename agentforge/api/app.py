@@ -1,9 +1,18 @@
-"""app.py — deprecated entry point, kept for backward compat. Use main.py.
-
-The canonical application factory is agentforge.api.main:app.
-This shim re-exports it so that any code or config pointing at
-'agentforge.api.app:app' continues to work without changes.
 """
-from agentforge.api.main import app  # noqa: F401
+DEPRECATED: This file is kept for backwards compatibility only.
+The canonical FastAPI app entry point is agentforge/api/main.py
+
+Do NOT import from this file. Use:
+    from agentforge.api.main import app
+"""
+import warnings
+
+warnings.warn(
+    "agentforge.api.app is deprecated. Use agentforge.api.main instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+from agentforge.api.main import app  # noqa: F401, E402
 
 __all__ = ["app"]

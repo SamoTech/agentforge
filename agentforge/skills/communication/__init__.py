@@ -1,6 +1,13 @@
-"""agentforge.skills.communication — domain sub-package for communication skills.
-
-All skill implementations live in agentforge/skills/catalog/.
-This package is a namespace placeholder for future domain-specific organisation.
-Skills are auto-discovered from the catalog by SkillRegistry.auto_discover().
 """
+Communication Skills sub-package.
+Skills for email, messaging, notifications, and webhooks.
+All implementations live in agentforge/skills/catalog/ and are
+auto-discovered by the registry.
+"""
+from agentforge.skills.registry import registry
+
+def get_communication_skills():
+    from agentforge.skills.base import SkillCategory
+    return registry.list_by_category(SkillCategory.COMMUNICATION)
+
+__all__ = ["get_communication_skills"]
