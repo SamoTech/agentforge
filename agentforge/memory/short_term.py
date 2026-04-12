@@ -61,9 +61,20 @@ class ShortTermMemory:
         r = await self._client()
         await r.delete(f"agentforge:mem:session:{self.session_id}:kv:{key}")
 
-    # ── Context window helper ─────────────────────────────────────────────
+    # ── Context window helper ──────────────────────────────────────────────
 
-    async def get_context_window(self, last_n: int = 10) -> str:
-        """Return messages formatted for LLM context injection."""
-        msgs = await self.get_messages(last_n)
-        return "\n".join(f"{m['role'].upper()}: {m['content']}" for m in msgs)
+    async def get_context_window(self, last_n: int = 10) -> list[dict]:
+        """Return the last N messages as a list of OpenAI-format message dicts.
+
+        Returns::
+
+            [
+                {"role": "user",      "content": "Hello"},
+                {"role": "assistant", "content": "Hi there!"},
+                ...
+            ]
+
+        This format is consumed directly by Orchestrator.run(context=...) and
+        can be passed straight into any OpenAI chat.completions.create() call.
+        """
+        return await self.get_messages(last_n)
