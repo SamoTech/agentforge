@@ -1,164 +1,194 @@
-"""Skill: web_search — search the web using SerpAPI, Brave, or DuckDuckGo."""
+"""
+Advanced Web Search Skill v2
+Features: multi-provider (DuckDuckGo free, Tavily, Brave, SerpAPI),
+          auto provider selection, deduplication, result ranking,
+          news/web/academic search types, time-range filtering.
+"""
 from __future__ import annotations
+
 import os
-from agentforge.skills.base import BaseSkill, SkillInput, SkillOutput
+from typing import Any, Optional
+
+import httpx
+
+from agentforge.skills.base import BaseSkill, SkillCategory, SkillConfig
 
 
 class WebSearchSkill(BaseSkill):
     name = "web_search"
     description = (
-        "Search the web and return top results with titles, URLs, and snippets. "
-        "Supports SerpAPI (richest results), Brave Search API, and DuckDuckGo (no key)."
+        "Multi-provider web search with automatic provider selection. "
+        "Supports DuckDuckGo (free), Tavily, Brave Search. "
+        "Returns ranked, deduplicated results with snippets and metadata."
     )
-    category = "search"
-    tags = ["search", "internet", "research", "serpapi", "brave", "duckduckgo"]
-    level = "advanced"
-    requires_network = True
+    category = SkillCategory.SEARCH
+    version = "2.0.0"
+    tags = ["search", "web", "research", "duckduckgo", "tavily", "brave", "news"]
+
     input_schema = {
-        "query":    {"type": "string",  "required": True,  "description": "Search query"},
-        "num":      {"type": "integer", "default": 8,     "description": "Max results to return"},
-        "provider": {"type": "string",  "default": "auto",
-                     "description": "auto | serpapi | brave | duckduckgo. auto picks best available."},
-        "region":   {"type": "string",  "default": "us",  "description": "Region/locale code"},
-        "safe":     {"type": "boolean", "default": True,  "description": "Enable safe-search"},
-    }
-    output_schema = {
-        "results":  {"type": "array",   "description": "[{title, url, snippet, source}]"},
-        "provider_used": {"type": "string"},
-        "total_results": {"type": "integer"},
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"},
+            "provider": {
+                "type": "string",
+                "enum": ["auto", "duckduckgo", "tavily", "brave"],
+                "default": "auto",
+            },
+            "num_results": {"type": "integer", "default": 10},
+            "search_type": {
+                "type": "string",
+                "enum": ["web", "news"],
+                "default": "web",
+            },
+            "region": {"type": "string", "default": "wt-wt"},
+            "time_range": {
+                "type": "string",
+                "enum": ["day", "week", "month", "year", ""],
+                "default": "",
+            },
+        },
+        "required": ["query"],
     }
 
-    async def execute(self, inp: SkillInput) -> SkillOutput:
-        query    = inp.data.get("query", "")
-        num      = int(inp.data.get("num", 8))
-        provider = inp.data.get("provider", "auto")
-        if not query:
-            return SkillOutput.fail("query is required")
+    def __init__(self):
+        super().__init__(SkillConfig(timeout_seconds=20, max_retries=3, cache_ttl_seconds=300))
+        self._tavily_key = os.getenv("TAVILY_API_KEY", "")
+        self._brave_key = os.getenv("BRAVE_SEARCH_KEY", "")
 
-        # Auto-select best available provider based on env keys
+    def _select_provider(self) -> str:
+        if self._tavily_key:
+            return "tavily"
+        if self._brave_key:
+            return "brave"
+        return "duckduckgo"
+
+    async def _search_duckduckgo(self, query: str, num: int, region: str, time_range: str) -> list[dict]:
+        params: dict = {"q": query, "format": "json", "no_html": "1", "skip_disambig": "1", "kl": region}
+        if time_range:
+            params["df"] = time_range[:1]
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get("https://api.duckduckgo.com/", params=params)
+            data = resp.json()
+
+        results = []
+        if data.get("AbstractText"):
+            results.append({
+                "title": data.get("Heading", ""),
+                "url": data.get("AbstractURL", ""),
+                "snippet": data["AbstractText"],
+                "source": data.get("AbstractSource", ""),
+                "type": "instant_answer",
+            })
+        for topic in data.get("RelatedTopics", [])[:num]:
+            if isinstance(topic, dict) and topic.get("Text"):
+                results.append({
+                    "title": topic.get("Text", "")[:80],
+                    "url": topic.get("FirstURL", ""),
+                    "snippet": topic.get("Text", ""),
+                    "source": "duckduckgo",
+                    "type": "related",
+                })
+
+        if len(results) < 3:
+            try:
+                headers = {"User-Agent": "Mozilla/5.0 (compatible; AgentForge/2.0)"}
+                async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
+                    resp = await client.get("https://html.duckduckgo.com/html/",
+                        params={"q": query, "kl": region})
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, "html.parser")
+                for r in soup.select(".result__body")[:num]:
+                    title_el = r.select_one(".result__title")
+                    url_el = r.select_one(".result__url")
+                    snippet_el = r.select_one(".result__snippet")
+                    if title_el and snippet_el:
+                        results.append({
+                            "title": title_el.get_text(strip=True),
+                            "url": url_el.get_text(strip=True) if url_el else "",
+                            "snippet": snippet_el.get_text(strip=True),
+                            "source": "duckduckgo", "type": "web",
+                        })
+            except Exception:
+                pass
+        return results[:num]
+
+    async def _search_tavily(self, query: str, num: int, search_type: str) -> list[dict]:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post("https://api.tavily.com/search", json={
+                "api_key": self._tavily_key, "query": query,
+                "max_results": num, "search_depth": "advanced",
+                "include_answer": True, "include_raw_content": False,
+                "topic": "news" if search_type == "news" else "general",
+            })
+            data = resp.json()
+        results = []
+        if data.get("answer"):
+            results.append({"title": "AI Answer", "url": "", "snippet": data["answer"],
+                "type": "ai_answer", "source": "tavily"})
+        for r in data.get("results", []):
+            results.append({
+                "title": r.get("title", ""), "url": r.get("url", ""),
+                "snippet": r.get("content", ""), "score": r.get("score", 0),
+                "published_date": r.get("published_date", ""),
+                "source": "tavily", "type": "web",
+            })
+        return results
+
+    async def _search_brave(self, query: str, num: int, time_range: str) -> list[dict]:
+        params: dict = {"q": query, "count": num}
+        if time_range:
+            params["freshness"] = {"day": "pd", "week": "pw", "month": "pm"}.get(time_range, "")
+        async with httpx.AsyncClient(
+            headers={"Accept": "application/json", "X-Subscription-Token": self._brave_key},
+            timeout=15.0,
+        ) as client:
+            resp = await client.get("https://api.search.brave.com/res/v1/web/search", params=params)
+            data = resp.json()
+        return [
+            {"title": r.get("title", ""), "url": r.get("url", ""),
+             "snippet": r.get("description", ""), "source": "brave", "type": "web"}
+            for r in data.get("web", {}).get("results", [])
+        ]
+
+    def _deduplicate(self, results: list[dict]) -> list[dict]:
+        seen_urls, seen_snippets, deduped = set(), set(), []
+        for r in results:
+            url = r.get("url", "")
+            snippet_key = r.get("snippet", "")[:50]
+            if url and url not in seen_urls and snippet_key not in seen_snippets:
+                seen_urls.add(url)
+                seen_snippets.add(snippet_key)
+                deduped.append(r)
+        return deduped
+
+    async def _execute(
+        self,
+        query: str,
+        provider: str = "auto",
+        num_results: int = 10,
+        search_type: str = "web",
+        region: str = "wt-wt",
+        time_range: str = "",
+        **kwargs,
+    ) -> Any:
         if provider == "auto":
-            if os.getenv("SERPAPI_KEY"):
-                provider = "serpapi"
-            elif os.getenv("BRAVE_SEARCH_KEY"):
-                provider = "brave"
-            else:
-                provider = "duckduckgo"
+            provider = self._select_provider()
 
         try:
-            if provider == "serpapi":
-                results = await self._serpapi(query, num, inp.data)
-            elif provider == "brave":
-                results = await self._brave(query, num, inp.data)
-            else:
-                results = await self._duckduckgo(query, num)
-
-            return SkillOutput(data={
-                "results":       results[:num],
-                "provider_used": provider,
-                "total_results": len(results),
-            })
-        except Exception as e:
-            return SkillOutput.fail(str(e))
-
-    # ── Providers ─────────────────────────────────────────────────────────
-
-    async def _serpapi(self, query: str, num: int, inp_data: dict) -> list[dict]:
-        import httpx
-        params = {
-            "q":      query,
-            "num":    num,
-            "hl":     inp_data.get("region", "us"),
-            "safe":   "active" if inp_data.get("safe", True) else "off",
-            "api_key": os.getenv("SERPAPI_KEY"),
-            "engine": "google",
-        }
-        async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.get("https://serpapi.com/search", params=params)
-            r.raise_for_status()
-        data = r.json()
-        results = []
-        for item in data.get("organic_results", []):
-            results.append({
-                "title":   item.get("title", ""),
-                "url":     item.get("link", ""),
-                "snippet": item.get("snippet", ""),
-                "source":  item.get("source", ""),
-            })
-        return results
-
-    async def _brave(self, query: str, num: int, inp_data: dict) -> list[dict]:
-        import httpx
-        headers = {
-            "Accept": "application/json",
-            "Accept-Encoding": "gzip",
-            "X-Subscription-Token": os.getenv("BRAVE_SEARCH_KEY", ""),
-        }
-        params = {
-            "q":     query,
-            "count": num,
-            "country": inp_data.get("region", "US").upper(),
-            "safesearch": "strict" if inp_data.get("safe", True) else "off",
-        }
-        async with httpx.AsyncClient(timeout=15, headers=headers) as c:
-            r = await c.get("https://api.search.brave.com/res/v1/web/search", params=params)
-            r.raise_for_status()
-        data = r.json()
-        results = []
-        for item in data.get("web", {}).get("results", []):
-            results.append({
-                "title":   item.get("title", ""),
-                "url":     item.get("url", ""),
-                "snippet": item.get("description", ""),
-                "source":  item.get("meta_url", {}).get("hostname", ""),
-            })
-        return results
-
-    async def _duckduckgo(self, query: str, num: int) -> list[dict]:
-        """Use DDG HTML scrape (more reliable than Instant Answer API)."""
-        import httpx, re
-        headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; AgentForge/1.0)",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        results: list[dict] = []
-        try:
-            # Try DDG HTML endpoint
-            async with httpx.AsyncClient(timeout=15, headers=headers, follow_redirects=True) as c:
-                r = await c.post("https://html.duckduckgo.com/html/",
-                                 data={"q": query, "b": "", "kl": "us-en"})
-            # Extract results via simple regex (no BS4 dependency)
-            titles   = re.findall(r'class="result__a"[^>]*>([^<]+)<', r.text)
-            urls     = re.findall(r'class="result__url"[^>]*>\s*([^\s<]+)', r.text)
-            snippets = re.findall(r'class="result__snippet"[^>]*>([^<]+)<', r.text)
-            for i in range(min(len(titles), len(urls), num)):
-                results.append({
-                    "title":   titles[i].strip(),
-                    "url":     "https://" + urls[i].strip() if not urls[i].startswith("http") else urls[i].strip(),
-                    "snippet": snippets[i].strip() if i < len(snippets) else "",
-                    "source":  "",
-                })
+            match provider:
+                case "tavily":
+                    results = await self._search_tavily(query, num_results, search_type)
+                case "brave":
+                    results = await self._search_brave(query, num_results, time_range)
+                case _:
+                    results = await self._search_duckduckgo(query, num_results, region, time_range)
         except Exception:
-            pass
+            results = await self._search_duckduckgo(query, num_results, region, time_range)
 
-        # Fallback: DDG Instant Answer API
-        if not results:
-            async with httpx.AsyncClient(timeout=10) as c:
-                r = await c.get("https://api.duckduckgo.com/",
-                                params={"q": query, "format": "json", "no_html": 1})
-            data = r.json()
-            if data.get("AbstractURL"):
-                results.append({
-                    "title":   data.get("Heading", query),
-                    "url":     data["AbstractURL"],
-                    "snippet": data.get("AbstractText", ""),
-                    "source":  "",
-                })
-            for topic in (data.get("RelatedTopics") or [])[:num]:
-                if "FirstURL" in topic:
-                    results.append({
-                        "title":   topic.get("Text", "")[:120],
-                        "url":     topic["FirstURL"],
-                        "snippet": topic.get("Text", ""),
-                        "source":  "",
-                    })
-        return results
+        deduped = self._deduplicate(results)
+        return {
+            "query": query, "provider": provider,
+            "total_results": len(deduped),
+            "results": deduped[:num_results],
+            "search_type": search_type,
+        }

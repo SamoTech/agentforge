@@ -1,170 +1,209 @@
-"""Skill: web_scraper — fetch and clean text content from a URL with retries and JS rendering."""
+"""
+Advanced Web Scraper Skill v2
+Features: full HTML parsing, CSS selector extraction, link following,
+          structured data (JSON-LD), metadata, images, multi-page crawl,
+          content cleaning, anti-bot headers.
+"""
 from __future__ import annotations
-from agentforge.skills.base import BaseSkill, SkillInput, SkillOutput
+
+import asyncio
+import re
+from typing import Any, Optional
+from urllib.parse import urljoin, urlparse
+
+import httpx
+from bs4 import BeautifulSoup
+
+from agentforge.skills.base import BaseSkill, SkillCategory, SkillConfig
 
 
 class WebScraperSkill(BaseSkill):
     name = "web_scraper"
     description = (
-        "Fetch a URL and extract clean readable text, title, metadata, and links. "
-        "Handles JS-heavy pages via Playwright fallback, respects robots.txt, retries on failure."
+        "Scrapes web pages with full HTML parsing, CSS selector extraction, "
+        "link following, structured data extraction (JSON-LD), metadata, "
+        "and optional multi-page crawling."
     )
-    category = "search"
-    tags = ["scrape", "crawl", "html", "extract", "text", "playwright"]
-    level = "advanced"
-    requires_network = True
+    category = SkillCategory.SEARCH
+    version = "2.0.0"
+    tags = ["web", "scraping", "html", "data-extraction", "research", "crawl"]
+
     input_schema = {
-        "url":            {"type": "string",  "required": True},
-        "extract_links":  {"type": "boolean", "default": False},
-        "max_chars":      {"type": "integer", "default": 16000},
-        "js_render":      {"type": "boolean", "default": False,
-                           "description": "Use Playwright headless browser for JS-heavy pages"},
-        "wait_selector":  {"type": "string",  "default": "",
-                           "description": "CSS selector to wait for before extracting (js_render only)"},
-        "timeout":        {"type": "integer", "default": 20},
-        "proxy":          {"type": "string",  "default": "",
-                           "description": "Optional HTTP proxy URL"},
-    }
-    output_schema = {
-        "title":       {"type": "string"},
-        "text":        {"type": "string"},
-        "links":       {"type": "array"},
-        "status":      {"type": "integer"},
-        "word_count":  {"type": "integer"},
-        "meta": {"type": "object", "description": "og:title, og:description, canonical, etc."},
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "URL to scrape"},
+            "selectors": {
+                "type": "object",
+                "description": "CSS selectors map e.g. {'title': 'h1', 'body': 'article'}",
+            },
+            "extract_links": {"type": "boolean", "default": False},
+            "extract_images": {"type": "boolean", "default": False},
+            "follow_links": {"type": "boolean", "default": False},
+            "max_depth": {"type": "integer", "default": 1},
+            "clean_text": {"type": "boolean", "default": True},
+            "extract_metadata": {"type": "boolean", "default": True},
+        },
+        "required": ["url"],
     }
 
-    _SKIP_TAGS = {"script", "style", "nav", "footer", "header", "aside",
-                  "noscript", "iframe", "svg", "button"}
-
-    async def execute(self, inp: SkillInput) -> SkillOutput:
-        url       = inp.data.get("url", "").strip()
-        max_chars = int(inp.data.get("max_chars", 16000))
-        get_links = bool(inp.data.get("extract_links", False))
-        js_render = bool(inp.data.get("js_render", False))
-        wait_sel  = inp.data.get("wait_selector", "")
-        timeout   = int(inp.data.get("timeout", 20))
-        proxy     = inp.data.get("proxy", "") or None
-
-        if not url:
-            return SkillOutput.fail("url is required")
-        if not url.startswith(("http://", "https://")):
-            url = "https://" + url
-
-        try:
-            if js_render:
-                html, status = await self._playwright_fetch(url, wait_sel, timeout)
-            else:
-                html, status = await self._httpx_fetch(url, timeout, proxy)
-
-            parsed = self._parse_html(html, url)
-            text   = parsed["text"][:max_chars]
-            return SkillOutput(data={
-                "title":      parsed["title"],
-                "text":       text,
-                "links":      parsed["links"][:100] if get_links else [],
-                "status":     status,
-                "word_count": len(text.split()),
-                "meta":       parsed["meta"],
-            })
-        except Exception as e:
-            return SkillOutput.fail(str(e))
-
-    async def _httpx_fetch(self, url: str, timeout: int, proxy: str | None) -> tuple[str, int]:
-        import httpx
-        from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-
-        @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
-            retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
-            reraise=True,
-        )
-        async def _fetch() -> httpx.Response:
-            kwargs: dict = {
-                "timeout": timeout,
-                "follow_redirects": True,
-                "headers": {
-                    "User-Agent": "Mozilla/5.0 (compatible; AgentForge/1.0)",
-                    "Accept": "text/html,application/xhtml+xml,*/*",
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-            }
-            if proxy:
-                kwargs["proxies"] = {"http://": proxy, "https://": proxy}
-            async with httpx.AsyncClient(**kwargs) as c:
-                return await c.get(url)
-
-        r = await _fetch()
-        return r.text, r.status_code
-
-    async def _playwright_fetch(self, url: str, wait_selector: str, timeout: int) -> tuple[str, int]:
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            raise ImportError("playwright not installed. Run: pip install playwright && playwright install chromium")
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            resp = await page.goto(url, timeout=timeout * 1000, wait_until="networkidle")
-            if wait_selector:
-                await page.wait_for_selector(wait_selector, timeout=timeout * 1000)
-            html = await page.content()
-            await browser.close()
-        return html, resp.status if resp else 200
-
-    def _parse_html(self, html: str, base_url: str) -> dict:
-        from html.parser import HTMLParser
-        from urllib.parse import urljoin
-
-        class _Parser(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self._skip      = False
-                self._skip_stack = 0
-                self.text_parts: list[str] = []
-                self.title  = ""
-                self.links:  list[str] = []
-                self.meta:   dict = {}
-                self._in_title = False
-
-            def handle_starttag(self, tag, attrs):
-                a = dict(attrs)
-                if tag in WebScraperSkill._SKIP_TAGS:
-                    self._skip_stack += 1
-                if tag == "title":
-                    self._in_title = True
-                if tag == "a":
-                    href = a.get("href", "")
-                    if href:
-                        self.links.append(urljoin(base_url, href))
-                if tag == "meta":
-                    prop = a.get("property", a.get("name", ""))
-                    if prop and a.get("content"):
-                        self.meta[prop] = a["content"]
-                if tag == "link" and a.get("rel") == "canonical":
-                    self.meta["canonical"] = a.get("href", "")
-
-            def handle_endtag(self, tag):
-                if tag in WebScraperSkill._SKIP_TAGS:
-                    self._skip_stack = max(0, self._skip_stack - 1)
-                if tag == "title":
-                    self._in_title = False
-
-            def handle_data(self, data):
-                if self._in_title:
-                    self.title += data
-                elif self._skip_stack == 0:
-                    s = data.strip()
-                    if s:
-                        self.text_parts.append(s)
-
-        p = _Parser()
-        p.feed(html)
-        return {
-            "title": p.title.strip(),
-            "text":  " ".join(p.text_parts),
-            "links": list(dict.fromkeys(p.links)),  # deduplicate preserving order
-            "meta":  p.meta,
+    def __init__(self):
+        super().__init__(SkillConfig(timeout_seconds=30, max_retries=3, cache_ttl_seconds=600))
+        self._headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
         }
+
+    async def _fetch(self, url: str) -> tuple[str, int]:
+        async with httpx.AsyncClient(
+            headers=self._headers,
+            follow_redirects=True,
+            timeout=25.0,
+        ) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return resp.text, resp.status_code
+
+    def _clean_text(self, text: str) -> str:
+        text = re.sub(r"\s+", " ", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+    def _extract_metadata(self, soup: BeautifulSoup, url: str) -> dict:
+        meta = {
+            "url": url, "title": "", "description": "",
+            "keywords": [], "og": {}, "canonical": "", "lang": "",
+        }
+        if soup.title:
+            meta["title"] = soup.title.get_text(strip=True)
+        for tag in soup.find_all("meta"):
+            name = tag.get("name", "").lower()
+            prop = tag.get("property", "").lower()
+            content = tag.get("content", "")
+            if name == "description":
+                meta["description"] = content
+            elif name == "keywords":
+                meta["keywords"] = [k.strip() for k in content.split(",")]
+            elif prop.startswith("og:"):
+                meta["og"][prop[3:]] = content
+        canonical = soup.find("link", rel="canonical")
+        if canonical:
+            meta["canonical"] = canonical.get("href", "")
+        html_tag = soup.find("html")
+        if html_tag:
+            meta["lang"] = html_tag.get("lang", "")
+        return meta
+
+    def _extract_structured_data(self, soup: BeautifulSoup) -> list[dict]:
+        import json
+        results = []
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.string or "")
+                results.append(data)
+            except Exception:
+                pass
+        return results
+
+    def _apply_selectors(self, soup: BeautifulSoup, selectors: dict) -> dict:
+        extracted = {}
+        for key, selector in selectors.items():
+            elements = soup.select(selector)
+            if not elements:
+                extracted[key] = None
+            elif len(elements) == 1:
+                extracted[key] = elements[0].get_text(strip=True)
+            else:
+                extracted[key] = [e.get_text(strip=True) for e in elements]
+        return extracted
+
+    def _extract_links(self, soup: BeautifulSoup, base_url: str) -> list[dict]:
+        links = []
+        seen = set()
+        for a in soup.find_all("a", href=True):
+            full_url = urljoin(base_url, a["href"])
+            parsed = urlparse(full_url)
+            if parsed.scheme in ("http", "https") and full_url not in seen:
+                seen.add(full_url)
+                links.append({
+                    "url": full_url,
+                    "text": a.get_text(strip=True),
+                    "domain": parsed.netloc,
+                })
+        return links
+
+    def _extract_images(self, soup: BeautifulSoup, base_url: str) -> list[dict]:
+        images = []
+        for img in soup.find_all("img"):
+            src = img.get("src") or img.get("data-src", "")
+            if src:
+                images.append({
+                    "url": urljoin(base_url, src),
+                    "alt": img.get("alt", ""),
+                    "width": img.get("width"),
+                    "height": img.get("height"),
+                })
+        return images
+
+    async def _execute(
+        self,
+        url: str,
+        selectors: Optional[dict] = None,
+        extract_links: bool = False,
+        extract_images: bool = False,
+        follow_links: bool = False,
+        max_depth: int = 1,
+        clean_text: bool = True,
+        extract_metadata: bool = True,
+        **kwargs,
+    ) -> Any:
+        html, status_code = await self._fetch(url)
+        soup = BeautifulSoup(html, "html.parser")
+
+        for tag in soup(["script", "style", "noscript", "nav", "footer", "aside"]):
+            tag.decompose()
+
+        result: dict = {"url": url, "status_code": status_code}
+
+        main = soup.find("main") or soup.find("article") or soup.find("body")
+        raw_text = main.get_text(separator="\n") if main else soup.get_text(separator="\n")
+        result["content"] = self._clean_text(raw_text) if clean_text else raw_text
+        result["word_count"] = len(result["content"].split())
+        result["char_count"] = len(result["content"])
+
+        if extract_metadata:
+            result["metadata"] = self._extract_metadata(soup, url)
+            result["structured_data"] = self._extract_structured_data(soup)
+
+        if selectors:
+            result["extracted"] = self._apply_selectors(soup, selectors)
+
+        if extract_links:
+            all_links = self._extract_links(soup, url)
+            result["links"] = all_links
+            base_domain = urlparse(url).netloc
+            result["internal_links"] = [l for l in all_links if urlparse(l["url"]).netloc == base_domain]
+            result["external_links"] = [l for l in all_links if urlparse(l["url"]).netloc != base_domain]
+
+        if extract_images:
+            result["images"] = self._extract_images(soup, url)
+
+        if follow_links and max_depth > 1:
+            child_links = self._extract_links(soup, url)
+            same_domain = [
+                l["url"] for l in child_links
+                if urlparse(l["url"]).netloc == urlparse(url).netloc
+            ][:5]
+            child_results = await asyncio.gather(
+                *[self._execute(child_url, max_depth=max_depth - 1) for child_url in same_domain],
+                return_exceptions=True,
+            )
+            result["crawled_pages"] = [r for r in child_results if not isinstance(r, Exception)]
+
+        return result

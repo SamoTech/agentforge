@@ -1,309 +1,239 @@
-"""Skill: github — full GitHub REST API integration."""
+"""
+Advanced GitHub Skill v2
+Features: full repo/PR/issue/branch/commit management, code search,
+          CI status, file CRUD, release management, org support.
+"""
 from __future__ import annotations
+
+import base64
 import os
-from agentforge.skills.base import BaseSkill, SkillInput, SkillOutput
+from typing import Any, Optional
+
+import httpx
+
+from agentforge.skills.base import BaseSkill, SkillCategory, SkillConfig
 
 
 class GitHubSkill(BaseSkill):
     name = "github"
     description = (
-        "Full GitHub integration: repos, issues, PRs, files, branches, commits, "
-        "releases, code search, and webhooks via REST API v3."
+        "Full GitHub integration: repos, PRs, issues, branches, commits, "
+        "code search, CI/Actions status, file CRUD, and release management."
     )
-    category = "tool_use"
-    tags = ["github", "git", "repo", "pr", "issue", "code", "ci", "release", "branch"]
-    level = "advanced"
-    requires_network = True
+    category = SkillCategory.GITHUB
+    version = "2.0.0"
+    tags = ["github", "git", "devops", "pr", "issues", "ci", "repos", "code-search"]
+
     input_schema = {
-        "action": {
-            "type": "string", "required": True,
-            "description": (
-                "list_repos | get_repo | list_issues | create_issue | close_issue | "
-                "get_file | create_file | update_file | delete_file | "
-                "list_prs | create_pr | merge_pr | get_pr | "
-                "list_branches | create_branch | "
-                "list_commits | get_commit | "
-                "list_releases | create_release | "
-                "search_code | search_repos | "
-                "add_comment | list_comments | "
-                "get_user | list_collaborators"
-            ),
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": [
+                    "get_repo", "list_repos", "create_repo",
+                    "get_file", "create_file", "update_file", "delete_file",
+                    "list_prs", "get_pr", "create_pr", "merge_pr", "review_pr",
+                    "list_issues", "create_issue", "close_issue", "comment_issue",
+                    "list_branches", "create_branch", "delete_branch",
+                    "list_commits", "get_commit",
+                    "search_code", "search_repos",
+                    "get_actions_runs", "create_release", "list_releases",
+                    "get_user", "list_org_repos",
+                ],
+            },
+            "owner": {"type": "string"},
+            "repo": {"type": "string"},
+            "params": {"type": "object", "description": "Action-specific parameters"},
         },
-        "owner":  {"type": "string", "required": False},
-        "repo":   {"type": "string", "required": False},
-        "token":  {"type": "string", "required": False, "description": "PAT (falls back to GITHUB_TOKEN env)"},
-        "params": {"type": "object", "required": False, "description": "Action-specific parameters"},
+        "required": ["action"],
     }
-    output_schema = {"result": {"type": "any"}, "pagination": {"type": "object"}}
 
-    _BASE = "https://api.github.com"
+    def __init__(self, token: Optional[str] = None):
+        super().__init__(SkillConfig(timeout_seconds=30, max_retries=3, cache_ttl_seconds=60))
+        self._token = token or os.getenv("GITHUB_TOKEN", "")
+        self._base = "https://api.github.com"
 
-    async def execute(self, inp: SkillInput) -> SkillOutput:
-        action = inp.data.get("action", "").strip()
-        owner  = inp.data.get("owner", "")
-        repo   = inp.data.get("repo", "")
-        token  = inp.data.get("token") or os.getenv("GITHUB_TOKEN", "")
-        params = inp.data.get("params", {}) or {}
-
-        if not action:
-            return SkillOutput.fail("action is required")
-
-        headers = {
-            "Accept": "application/vnd.github+json",
+    def _headers(self) -> dict:
+        h = {
+            "Accept": "application/vnd.github.v3+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        if self._token:
+            h["Authorization"] = f"Bearer {self._token}"
+        return h
 
-        try:
-            import httpx
+    async def _api(
+        self,
+        method: str,
+        path: str,
+        json: Optional[dict] = None,
+        params: Optional[dict] = None,
+    ) -> Any:
+        async with httpx.AsyncClient(headers=self._headers(), timeout=25.0) as client:
+            resp = await client.request(
+                method, f"{self._base}{path}", json=json, params=params
+            )
+            if resp.status_code == 404:
+                return {"error": "Not found", "status": 404}
+            resp.raise_for_status()
+            if resp.status_code == 204:
+                return {"success": True}
+            return resp.json()
 
-            async def _get(path: str, qp: dict | None = None) -> dict | list:
-                async with httpx.AsyncClient(headers=headers, timeout=20) as c:
-                    r = await c.get(f"{self._BASE}{path}", params=qp or {})
-                    r.raise_for_status()
-                    return r.json()
+    async def _execute(
+        self,
+        action: str,
+        owner: Optional[str] = None,
+        repo: Optional[str] = None,
+        params: Optional[dict] = None,
+        **kwargs,
+    ) -> Any:
+        p = params or {}
 
-            async def _post(path: str, body: dict) -> dict:
-                async with httpx.AsyncClient(headers=headers, timeout=20) as c:
-                    r = await c.post(f"{self._BASE}{path}", json=body)
-                    r.raise_for_status()
-                    return r.json()
+        match action:
+            case "get_repo":
+                return await self._api("GET", f"/repos/{owner}/{repo}")
 
-            async def _patch(path: str, body: dict) -> dict:
-                async with httpx.AsyncClient(headers=headers, timeout=20) as c:
-                    r = await c.patch(f"{self._BASE}{path}", json=body)
-                    r.raise_for_status()
-                    return r.json()
+            case "list_repos":
+                username = p.get("username", owner)
+                return await self._api("GET", f"/users/{username}/repos",
+                    params={"per_page": p.get("per_page", 30), "sort": "updated"})
 
-            async def _put(path: str, body: dict) -> dict:
-                async with httpx.AsyncClient(headers=headers, timeout=20) as c:
-                    r = await c.put(f"{self._BASE}{path}", json=body)
-                    r.raise_for_status()
-                    return r.json()
-
-            async def _delete(path: str, body: dict | None = None) -> dict | None:
-                async with httpx.AsyncClient(headers=headers, timeout=20) as c:
-                    r = await c.request("DELETE", f"{self._BASE}{path}", json=body)
-                    r.raise_for_status()
-                    return r.json() if r.content else None
-
-            # ── Repositories ─────────────────────────────────────────────
-            if action == "list_repos":
-                data = await _get(f"/users/{owner}/repos",
-                                  {"per_page": params.get("per_page", 30), "sort": params.get("sort", "updated")})
-                return SkillOutput(data={"result": [
-                    {"name": r["name"], "description": r["description"],
-                     "stars": r["stargazers_count"], "language": r["language"],
-                     "url": r["html_url"], "private": r["private"]}
-                    for r in data
-                ]})
-
-            if action == "get_repo":
-                data = await _get(f"/repos/{owner}/{repo}")
-                return SkillOutput(data={"result": data})
-
-            if action == "search_repos":
-                q = params.get("query", f"user:{owner}")
-                data = await _get("/search/repositories",
-                                  {"q": q, "per_page": params.get("per_page", 10)})
-                return SkillOutput(data={"result": data.get("items", []),
-                                         "pagination": {"total": data.get("total_count", 0)}})
-
-            # ── Issues ───────────────────────────────────────────────────
-            if action == "list_issues":
-                data = await _get(f"/repos/{owner}/{repo}/issues",
-                                  {"state": params.get("state", "open"),
-                                   "labels": params.get("labels", ""),
-                                   "per_page": params.get("per_page", 30)})
-                return SkillOutput(data={"result": [
-                    {"number": i["number"], "title": i["title"],
-                     "state": i["state"], "labels": [l["name"] for l in i["labels"]],
-                     "url": i["html_url"], "created_at": i["created_at"]}
-                    for i in data if not i.get("pull_request")  # exclude PRs
-                ]})
-
-            if action == "create_issue":
-                body: dict = {"title": params["title"], "body": params.get("body", "")}
-                if params.get("labels"):
-                    body["labels"] = params["labels"]
-                if params.get("assignees"):
-                    body["assignees"] = params["assignees"]
-                data = await _post(f"/repos/{owner}/{repo}/issues", body)
-                return SkillOutput(data={"result": {"number": data["number"], "url": data["html_url"]}})
-
-            if action == "close_issue":
-                data = await _patch(f"/repos/{owner}/{repo}/issues/{params['number']}",
-                                    {"state": "closed"})
-                return SkillOutput(data={"result": {"number": data["number"], "state": data["state"]}})
-
-            if action == "add_comment":
-                kind = params.get("kind", "issue")  # issue | pr
-                num  = params["number"]
-                data = await _post(f"/repos/{owner}/{repo}/issues/{num}/comments",
-                                   {"body": params["comment"]})
-                return SkillOutput(data={"result": {"id": data["id"], "url": data["html_url"]}})
-
-            if action == "list_comments":
-                data = await _get(f"/repos/{owner}/{repo}/issues/{params['number']}/comments")
-                return SkillOutput(data={"result": [
-                    {"id": c["id"], "user": c["user"]["login"],
-                     "body": c["body"], "created_at": c["created_at"]}
-                    for c in data
-                ]})
-
-            # ── Files ────────────────────────────────────────────────────
-            if action == "get_file":
-                import base64
-                data = await _get(f"/repos/{owner}/{repo}/contents/{params['path']}",
-                                  {"ref": params.get("ref", "")})
-                if isinstance(data, list):
-                    return SkillOutput(data={"result": [{"name": f["name"], "type": f["type"], "size": f["size"]} for f in data]})
-                content = base64.b64decode(data["content"]).decode(errors="replace")
-                return SkillOutput(data={"result": {"content": content, "sha": data["sha"], "size": data["size"]}})
-
-            if action == "create_file":
-                import base64
-                b64 = base64.b64encode(params["content"].encode()).decode()
-                data = await _put(f"/repos/{owner}/{repo}/contents/{params['path']}",
-                                  {"message": params.get("message", "Create file via AgentForge"),
-                                   "content": b64,
-                                   "branch": params.get("branch", "main")})
-                return SkillOutput(data={"result": {"path": data["content"]["path"], "sha": data["content"]["sha"]}})
-
-            if action == "update_file":
-                import base64
-                b64 = base64.b64encode(params["content"].encode()).decode()
-                data = await _put(f"/repos/{owner}/{repo}/contents/{params['path']}",
-                                  {"message": params.get("message", "Update file via AgentForge"),
-                                   "content": b64,
-                                   "sha": params["sha"],
-                                   "branch": params.get("branch", "main")})
-                return SkillOutput(data={"result": {"path": data["content"]["path"]}})
-
-            if action == "delete_file":
-                data = await _delete(f"/repos/{owner}/{repo}/contents/{params['path']}",
-                                     {"message": params.get("message", "Delete file via AgentForge"),
-                                      "sha": params["sha"],
-                                      "branch": params.get("branch", "main")})
-                return SkillOutput(data={"result": {"deleted": True}})
-
-            # ── Pull Requests ─────────────────────────────────────────────
-            if action == "list_prs":
-                data = await _get(f"/repos/{owner}/{repo}/pulls",
-                                  {"state": params.get("state", "open"), "per_page": params.get("per_page", 20)})
-                return SkillOutput(data={"result": [
-                    {"number": p["number"], "title": p["title"], "state": p["state"],
-                     "head": p["head"]["ref"], "base": p["base"]["ref"],
-                     "url": p["html_url"], "draft": p["draft"]}
-                    for p in data
-                ]})
-
-            if action == "get_pr":
-                data = await _get(f"/repos/{owner}/{repo}/pulls/{params['number']}")
-                return SkillOutput(data={"result": data})
-
-            if action == "create_pr":
-                data = await _post(f"/repos/{owner}/{repo}/pulls", {
-                    "title": params["title"],
-                    "body":  params.get("body", ""),
-                    "head":  params["head"],
-                    "base":  params.get("base", "main"),
-                    "draft": params.get("draft", False),
+            case "create_repo":
+                return await self._api("POST", "/user/repos", json={
+                    "name": p["name"], "description": p.get("description", ""),
+                    "private": p.get("private", False), "auto_init": p.get("auto_init", True),
                 })
-                return SkillOutput(data={"result": {"number": data["number"], "url": data["html_url"]}})
 
-            if action == "merge_pr":
-                data = await _put(f"/repos/{owner}/{repo}/pulls/{params['number']}/merge", {
-                    "merge_method": params.get("method", "squash"),
-                    "commit_title": params.get("title", ""),
+            case "get_file":
+                query = {"ref": p["ref"]} if p.get("ref") else {}
+                data = await self._api("GET", f"/repos/{owner}/{repo}/contents/{p.get('path', '')}", params=query)
+                if isinstance(data, dict) and "content" in data:
+                    data["decoded_content"] = base64.b64decode(
+                        data["content"].replace("\n", "")
+                    ).decode("utf-8", errors="replace")
+                return data
+
+            case "create_file":
+                return await self._api("PUT", f"/repos/{owner}/{repo}/contents/{p['path']}", json={
+                    "message": p.get("message", "Create file via AgentForge"),
+                    "content": base64.b64encode(p["content"].encode()).decode(),
+                    "branch": p.get("branch", "main"),
                 })
-                return SkillOutput(data={"result": {"merged": data.get("merged", False), "sha": data.get("sha")}})
 
-            # ── Branches ─────────────────────────────────────────────────
-            if action == "list_branches":
-                data = await _get(f"/repos/{owner}/{repo}/branches")
-                return SkillOutput(data={"result": [{"name": b["name"], "sha": b["commit"]["sha"]} for b in data]})
-
-            if action == "create_branch":
-                # Get SHA of source branch first
-                src = await _get(f"/repos/{owner}/{repo}/git/refs/heads/{params.get('from', 'main')}")
-                sha = src["object"]["sha"]
-                data = await _post(f"/repos/{owner}/{repo}/git/refs", {
-                    "ref": f"refs/heads/{params['name']}",
-                    "sha": sha,
+            case "update_file":
+                return await self._api("PUT", f"/repos/{owner}/{repo}/contents/{p['path']}", json={
+                    "message": p.get("message", "Update file via AgentForge"),
+                    "content": base64.b64encode(p["content"].encode()).decode(),
+                    "sha": p["sha"], "branch": p.get("branch", "main"),
                 })
-                return SkillOutput(data={"result": {"ref": data["ref"], "sha": data["object"]["sha"]}})
 
-            # ── Commits ──────────────────────────────────────────────────
-            if action == "list_commits":
-                data = await _get(f"/repos/{owner}/{repo}/commits",
-                                  {"per_page": params.get("per_page", 20),
-                                   "sha": params.get("branch", ""),
-                                   "author": params.get("author", "")})
-                return SkillOutput(data={"result": [
-                    {"sha": c["sha"][:7], "message": c["commit"]["message"].split("\n")[0],
-                     "author": c["commit"]["author"]["name"], "date": c["commit"]["author"]["date"]}
-                    for c in data
-                ]})
-
-            if action == "get_commit":
-                data = await _get(f"/repos/{owner}/{repo}/commits/{params['sha']}")
-                return SkillOutput(data={"result": {
-                    "sha": data["sha"], "message": data["commit"]["message"],
-                    "author": data["commit"]["author"]["name"],
-                    "files_changed": len(data.get("files", [])),
-                    "stats": data.get("stats", {}),
-                }})
-
-            # ── Releases ─────────────────────────────────────────────────
-            if action == "list_releases":
-                data = await _get(f"/repos/{owner}/{repo}/releases",
-                                  {"per_page": params.get("per_page", 10)})
-                return SkillOutput(data={"result": [
-                    {"id": r["id"], "tag": r["tag_name"], "name": r["name"],
-                     "draft": r["draft"], "prerelease": r["prerelease"],
-                     "created_at": r["created_at"]}
-                    for r in data
-                ]})
-
-            if action == "create_release":
-                data = await _post(f"/repos/{owner}/{repo}/releases", {
-                    "tag_name":   params["tag"],
-                    "name":       params.get("name", params["tag"]),
-                    "body":       params.get("body", ""),
-                    "draft":      params.get("draft", False),
-                    "prerelease": params.get("prerelease", False),
+            case "delete_file":
+                return await self._api("DELETE", f"/repos/{owner}/{repo}/contents/{p['path']}", json={
+                    "message": p.get("message", "Delete file via AgentForge"),
+                    "sha": p["sha"], "branch": p.get("branch", "main"),
                 })
-                return SkillOutput(data={"result": {"id": data["id"], "url": data["html_url"]}})
 
-            # ── Search ───────────────────────────────────────────────────
-            if action == "search_code":
-                q = params["query"]
-                if owner and repo and "repo:" not in q:
-                    q = f"{q} repo:{owner}/{repo}"
-                data = await _get("/search/code",
-                                  {"q": q, "per_page": params.get("per_page", 10)})
-                return SkillOutput(data={"result": [
-                    {"name": i["name"], "path": i["path"], "repo": i["repository"]["full_name"],
-                     "url": i["html_url"]}
-                    for i in data.get("items", [])
-                ], "pagination": {"total": data.get("total_count", 0)}})
+            case "list_prs":
+                return await self._api("GET", f"/repos/{owner}/{repo}/pulls",
+                    params={"state": p.get("state", "open"), "per_page": p.get("per_page", 20)})
 
-            # ── Users ────────────────────────────────────────────────────
-            if action == "get_user":
-                data = await _get(f"/users/{params.get('username', owner)}")
-                return SkillOutput(data={"result": {
-                    "login": data["login"], "name": data.get("name"),
-                    "bio": data.get("bio"), "public_repos": data["public_repos"],
-                    "followers": data["followers"], "url": data["html_url"],
-                }})
+            case "get_pr":
+                return await self._api("GET", f"/repos/{owner}/{repo}/pulls/{p['number']}")
 
-            if action == "list_collaborators":
-                data = await _get(f"/repos/{owner}/{repo}/collaborators")
-                return SkillOutput(data={"result": [{"login": u["login"], "role": u.get("role_name")} for u in data]})
+            case "create_pr":
+                return await self._api("POST", f"/repos/{owner}/{repo}/pulls", json={
+                    "title": p["title"], "body": p.get("body", ""),
+                    "head": p["head"], "base": p.get("base", "main"),
+                    "draft": p.get("draft", False),
+                })
 
-            return SkillOutput.fail(f"Unknown action: '{action}'. See input_schema for available actions.")
+            case "merge_pr":
+                return await self._api("PUT", f"/repos/{owner}/{repo}/pulls/{p['number']}/merge", json={
+                    "merge_method": p.get("merge_method", "squash"),
+                    "commit_title": p.get("commit_title", ""),
+                })
 
-        except Exception as e:
-            return SkillOutput.fail(str(e))
+            case "review_pr":
+                return await self._api("POST", f"/repos/{owner}/{repo}/pulls/{p['number']}/reviews", json={
+                    "body": p.get("body", ""),
+                    "event": p.get("event", "COMMENT"),
+                    "comments": p.get("comments", []),
+                })
+
+            case "list_issues":
+                return await self._api("GET", f"/repos/{owner}/{repo}/issues",
+                    params={"state": p.get("state", "open"), "labels": p.get("labels", ""),
+                            "per_page": p.get("per_page", 20)})
+
+            case "create_issue":
+                return await self._api("POST", f"/repos/{owner}/{repo}/issues", json={
+                    "title": p["title"], "body": p.get("body", ""),
+                    "labels": p.get("labels", []), "assignees": p.get("assignees", []),
+                })
+
+            case "close_issue":
+                return await self._api("PATCH", f"/repos/{owner}/{repo}/issues/{p['number']}",
+                    json={"state": "closed"})
+
+            case "comment_issue":
+                return await self._api("POST", f"/repos/{owner}/{repo}/issues/{p['number']}/comments",
+                    json={"body": p["body"]})
+
+            case "list_branches":
+                return await self._api("GET", f"/repos/{owner}/{repo}/branches",
+                    params={"per_page": p.get("per_page", 30)})
+
+            case "create_branch":
+                ref_data = await self._api("GET",
+                    f"/repos/{owner}/{repo}/git/ref/heads/{p.get('from_branch', 'main')}")
+                sha = ref_data["object"]["sha"]
+                return await self._api("POST", f"/repos/{owner}/{repo}/git/refs", json={
+                    "ref": f"refs/heads/{p['branch']}", "sha": sha,
+                })
+
+            case "delete_branch":
+                return await self._api("DELETE",
+                    f"/repos/{owner}/{repo}/git/refs/heads/{p['branch']}")
+
+            case "list_commits":
+                return await self._api("GET", f"/repos/{owner}/{repo}/commits",
+                    params={"sha": p.get("sha", ""), "per_page": p.get("per_page", 20),
+                            "author": p.get("author", "")})
+
+            case "get_commit":
+                return await self._api("GET", f"/repos/{owner}/{repo}/commits/{p['sha']}")
+
+            case "search_code":
+                return await self._api("GET", "/search/code",
+                    params={"q": p["query"], "per_page": p.get("per_page", 10)})
+
+            case "search_repos":
+                return await self._api("GET", "/search/repositories",
+                    params={"q": p["query"], "sort": p.get("sort", "stars"),
+                            "per_page": p.get("per_page", 10)})
+
+            case "get_actions_runs":
+                return await self._api("GET", f"/repos/{owner}/{repo}/actions/runs",
+                    params={"per_page": p.get("per_page", 10), "status": p.get("status", "")})
+
+            case "create_release":
+                return await self._api("POST", f"/repos/{owner}/{repo}/releases", json={
+                    "tag_name": p["tag"], "name": p.get("name", p["tag"]),
+                    "body": p.get("body", ""), "draft": p.get("draft", False),
+                    "prerelease": p.get("prerelease", False),
+                })
+
+            case "list_releases":
+                return await self._api("GET", f"/repos/{owner}/{repo}/releases",
+                    params={"per_page": p.get("per_page", 10)})
+
+            case "get_user":
+                return await self._api("GET", f"/users/{p.get('username', owner)}")
+
+            case "list_org_repos":
+                return await self._api("GET", f"/orgs/{owner}/repos",
+                    params={"per_page": p.get("per_page", 30), "type": p.get("type", "all")})
+
+            case _:
+                return {"error": f"Unknown action: {action}"}
