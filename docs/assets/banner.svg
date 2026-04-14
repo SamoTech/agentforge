@@ -1,67 +1,85 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0d0500"/>
-      <stop offset="100%" stop-color="#160800"/>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#05080f"/>
+      <stop offset="100%" stop-color="#0a0e1a"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#f97316"/>
-      <stop offset="100%" stop-color="#ea580c"/>
+    <linearGradient id="acc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
     </linearGradient>
+    <linearGradient id="acc2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M30 0L0 0 0 30" fill="none" stroke="#0c1020" stroke-width="1"/>
+    </pattern>
     <filter id="glow">
-      <feGaussianBlur stdDeviation="5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
-  <rect width="1280" height="640" fill="url(#bg)"/>
-  <ellipse cx="1000" cy="280" rx="380" ry="340" fill="#ea580c" fill-opacity="0.07"/>
-  <ellipse cx="120" cy="500" rx="240" ry="220" fill="#f97316" fill-opacity="0.04"/>
-  <rect x="92" y="148" width="64" height="18" rx="4" fill="none" stroke="#f97316" stroke-width="2.5" filter="url(#glow)"/>
-  <rect x="100" y="166" width="48" height="28" rx="3" fill="none" stroke="#f97316" stroke-width="2" filter="url(#glow)"/>
-  <line x1="164" y1="152" x2="178" y2="144" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
-  <line x1="164" y1="158" x2="182" y2="158" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
-  <line x1="164" y1="164" x2="178" y2="172" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
-  <rect x="840" y="140" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.4" stroke-width="1"/>
-  <text x="895" y="162" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Code Agent</text>
-  <rect x="840" y="192" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.35" stroke-width="1"/>
-  <text x="895" y="214" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Research Agent</text>
-  <rect x="840" y="244" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.3" stroke-width="1"/>
-  <text x="895" y="266" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Memory Agent</text>
-  <rect x="840" y="296" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.25" stroke-width="1"/>
-  <text x="895" y="318" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Planner Agent</text>
-  <rect x="840" y="348" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.2" stroke-width="1"/>
-  <text x="895" y="370" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Exec Agent</text>
-  <rect x="970" y="140" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.35" stroke-width="1"/>
-  <text x="1025" y="162" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">LangChain</text>
-  <rect x="970" y="192" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.3" stroke-width="1"/>
-  <text x="1025" y="214" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">AutoGen</text>
-  <rect x="970" y="244" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.25" stroke-width="1"/>
-  <text x="1025" y="266" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">CrewAI</text>
-  <rect x="970" y="296" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.2" stroke-width="1"/>
-  <text x="1025" y="318" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">ChromaDB</text>
-  <rect x="970" y="348" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.15" stroke-width="1"/>
-  <text x="1025" y="370" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Stripe</text>
-  <rect x="1100" y="140" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.3" stroke-width="1"/>
-  <text x="1155" y="162" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">10K+ Skills</text>
-  <rect x="1100" y="192" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.25" stroke-width="1"/>
-  <text x="1155" y="214" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">FastAPI</text>
-  <rect x="1100" y="244" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.2" stroke-width="1"/>
-  <text x="1155" y="266" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Next.js 14</text>
-  <rect x="1100" y="296" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.15" stroke-width="1"/>
-  <text x="1155" y="318" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Docker</text>
-  <rect x="1100" y="348" width="110" height="36" rx="6" fill="#1a0800" stroke="#f97316" stroke-opacity="0.12" stroke-width="1"/>
-  <text x="1155" y="370" fill="#fb923c" font-family="monospace" font-size="11" text-anchor="middle">Redis+FAISS</text>
-  <text x="88" y="198" fill="#94a3b8" font-family="Inter,-apple-system,sans-serif" font-size="22" font-weight="500" letter-spacing="3">SAMOTECH</text>
-  <text x="88" y="308" fill="#ffffff" font-family="Inter,-apple-system,sans-serif" font-size="96" font-weight="800" letter-spacing="-2">AgentForge</text>
-  <rect x="88" y="326" width="220" height="4" rx="2" fill="url(#accent)"/>
-  <text x="88" y="385" fill="#fb923c" font-family="Inter,-apple-system,sans-serif" font-size="23" font-weight="400">Mega AI Agent Platform</text>
-  <text x="88" y="425" fill="#475569" font-family="Inter,-apple-system,sans-serif" font-size="20">10,000+ skills · Multi-agent · Persistent memory · SaaS-ready</text>
-  <rect x="88" y="476" width="130" height="38" rx="19" fill="#ea580c" fill-opacity="0.1" stroke="#f97316" stroke-opacity="0.3" stroke-width="1"/>
-  <text x="153" y="501" fill="#f97316" font-family="Inter,sans-serif" font-size="15" font-weight="500" text-anchor="middle">10,000+ Skills</text>
-  <rect x="234" y="476" width="110" height="38" rx="19" fill="#ea580c" fill-opacity="0.08" stroke="#f97316" stroke-opacity="0.25" stroke-width="1"/>
-  <text x="289" y="501" fill="#f97316" font-family="Inter,sans-serif" font-size="15" font-weight="500" text-anchor="middle">4 Frameworks</text>
-  <rect x="360" y="476" width="108" height="38" rx="19" fill="#ea580c" fill-opacity="0.08" stroke="#f97316" stroke-opacity="0.25" stroke-width="1"/>
-  <text x="414" y="501" fill="#f97316" font-family="Inter,sans-serif" font-size="15" font-weight="500" text-anchor="middle">Stripe SaaS</text>
-  <rect x="484" y="476" width="100" height="38" rx="19" fill="#ea580c" fill-opacity="0.08" stroke="#f97316" stroke-opacity="0.25" stroke-width="1"/>
-  <text x="534" y="501" fill="#f97316" font-family="Inter,sans-serif" font-size="15" font-weight="500" text-anchor="middle">Docker</text>
+  <rect width="1280" height="320" fill="url(#bg)"/>
+  <rect width="1280" height="320" fill="url(#grid)"/>
+  <rect x="0" y="0" width="4" height="320" fill="url(#acc)"/>
+  <!-- agent orchestration diagram (right) -->
+  <g opacity="0.22" transform="translate(840,44)">
+    <!-- planner -->
+    <rect x="140" y="10" width="120" height="38" rx="8" fill="#1a1a2e" stroke="#f59e0b" stroke-width="2"/>
+    <text x="200" y="34" font-family="monospace" font-size="13" fill="#fbbf24" text-anchor="middle">🧠 Planner</text>
+    <!-- lines to executor and specialist -->
+    <line x1="140" y1="29" x2="60"  y2="90" stroke="#f59e0b" stroke-width="1.5"/>
+    <line x1="200" y1="48" x2="200" y2="90" stroke="#6366f1" stroke-width="1.5"/>
+    <line x1="260" y1="29" x2="340" y2="90" stroke="#3b82f6" stroke-width="1.5"/>
+    <!-- executor -->
+    <rect x="20"  y="90" width="120" height="38" rx="8" fill="#1a1a2e" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="80"  y="114" font-family="monospace" font-size="12" fill="#a5b4fc" text-anchor="middle">⚡ Executor</text>
+    <!-- memory -->
+    <rect x="140" y="90" width="120" height="38" rx="8" fill="#1a1a2e" stroke="#f59e0b" stroke-width="1.5"/>
+    <text x="200" y="114" font-family="monospace" font-size="12" fill="#fcd34d" text-anchor="middle">💾 Memory</text>
+    <!-- specialist -->
+    <rect x="280" y="90" width="120" height="38" rx="8" fill="#1a1a2e" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="340" y="114" font-family="monospace" font-size="12" fill="#93c5fd" text-anchor="middle">🔬 Specialist</text>
+    <!-- skill badge -->
+    <rect x="100" y="155" width="200" height="28" rx="14" fill="#f59e0b" opacity="0.18"/>
+    <text x="200" y="174" font-family="monospace" font-size="13" fill="#fbbf24" text-anchor="middle">10,000+ Modular Skills</text>
+    <!-- framework chips -->
+    <rect x="60"  y="198" width="80" height="24" rx="12" fill="#3b82f6" opacity="0.2"/>
+    <text x="100" y="215" font-family="monospace" font-size="11" fill="#93c5fd" text-anchor="middle">LangChain</text>
+    <rect x="155" y="198" width="70" height="24" rx="12" fill="#6366f1" opacity="0.2"/>
+    <text x="190" y="215" font-family="monospace" font-size="11" fill="#a5b4fc" text-anchor="middle">CrewAI</text>
+    <rect x="240" y="198" width="80" height="24" rx="12" fill="#f59e0b" opacity="0.2"/>
+    <text x="280" y="215" font-family="monospace" font-size="11" fill="#fbbf24" text-anchor="middle">AutoGen</text>
+  </g>
+  <!-- logo: forge/robot mark -->
+  <g transform="translate(80,84)" filter="url(#glow)">
+    <rect x="0" y="0" width="116" height="116" rx="18" fill="#080b16" stroke="url(#acc)" stroke-width="3"/>
+    <!-- robot head -->
+    <rect x="28" y="20" width="60" height="46" rx="10" fill="none" stroke="url(#acc)" stroke-width="3"/>
+    <!-- eyes -->
+    <circle cx="46" cy="38" r="6" fill="#f59e0b" opacity="0.9"/>
+    <circle cx="70" cy="38" r="6" fill="#f59e0b" opacity="0.9"/>
+    <!-- antenna -->
+    <line x1="58" y1="20" x2="58" y2="10" stroke="url(#acc)" stroke-width="2.5"/>
+    <circle cx="58" cy="8" r="4" fill="#fbbf24"/>
+    <!-- mouth -->
+    <path d="M40 54 Q58 66 76 54" fill="none" stroke="url(#acc)" stroke-width="2.5"/>
+    <!-- body -->
+    <rect x="38" y="68" width="40" height="28" rx="6" fill="none" stroke="url(#acc)" stroke-width="2" opacity="0.7"/>
+    <!-- core dot -->
+    <circle cx="58" cy="82" r="5" fill="#f59e0b" opacity="0.8"/>
+  </g>
+  <!-- wordmark -->
+  <text x="222" y="95" font-family="'SF Mono',Consolas,monospace" font-size="14" fill="#f59e0b" opacity="0.6" letter-spacing="5">AI AGENT PLATFORM</text>
+  <text x="218" y="178" font-family="Arial Black,'Arial Bold',sans-serif" font-size="82" font-weight="900" letter-spacing="-2" fill="#fffbeb">AgentForge</text>
+  <text x="222" y="215" font-family="'SF Mono',Consolas,monospace" font-size="18" fill="#fbbf24" letter-spacing="3" opacity="0.9">BUILD · DEPLOY · ORCHESTRATE AI AGENTS AT SCALE</text>
+  <rect x="220" y="233" width="560" height="2" fill="url(#acc)" opacity="0.45"/>
+  <!-- chips -->
+  <rect x="222" y="250" width="140" height="28" rx="14" fill="#f59e0b" opacity="0.15"/>
+  <text x="292" y="269" font-family="monospace" font-size="13" fill="#fbbf24" text-anchor="middle">10K+ Skills</text>
+  <rect x="374" y="250" width="140" height="28" rx="14" fill="#3b82f6" opacity="0.15"/>
+  <text x="444" y="269" font-family="monospace" font-size="13" fill="#93c5fd" text-anchor="middle">Multi-Agent</text>
+  <rect x="526" y="250" width="140" height="28" rx="14" fill="#6366f1" opacity="0.15"/>
+  <text x="596" y="269" font-family="monospace" font-size="13" fill="#a5b4fc" text-anchor="middle">SaaS-Ready</text>
 </svg>
