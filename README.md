@@ -1,5 +1,7 @@
 # 🤖 AgentForge
 
+![Banner](docs/assets/banner.svg)
+
 > **Mega AI Agent Platform** — 10,000+ modular skills, multi-agent orchestration, persistent memory, and SaaS-ready infrastructure.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
