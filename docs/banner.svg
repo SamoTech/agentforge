@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#160710;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#220b1a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accent_grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#a12c7b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d163a7;stop-opacity:1" />
+    </linearGradient>
+    <filter id="blur1"><feGaussianBlur stdDeviation="40"/></filter>
+    <filter id="blur2"><feGaussianBlur stdDeviation="25"/></filter>
+  </defs>
+  <rect width="1200" height="300" rx="16" ry="16" fill="url(#bg)"/>
+  <ellipse cx="200" cy="150" rx="220" ry="160" fill="#a12c7b" opacity="0.09" filter="url(#blur1)"/>
+  <ellipse cx="1050" cy="80" rx="180" ry="130" fill="#d163a7" opacity="0.07" filter="url(#blur1)"/>
+  <ellipse cx="600" cy="280" rx="300" ry="100" fill="#a12c7b" opacity="0.05" filter="url(#blur2)"/>
+  <rect x="0" y="0" width="5" height="300" rx="2" fill="url(#accent_grad)" opacity="0.9"/>
+  <rect x="0" y="0" width="1200" height="2" rx="1" fill="url(#accent_grad)" opacity="0.6"/>
+  <rect x="0" y="298" width="1200" height="2" rx="1" fill="url(#accent_grad)" opacity="0.4"/>
+  <circle cx="100" cy="150" r="52" fill="#a12c7b" opacity="0.12"/>
+  <circle cx="100" cy="150" r="40" fill="#a12c7b" opacity="0.10"/>
+  <text x="100" y="168" font-size="38" text-anchor="middle" dominant-baseline="middle" font-family="Segoe UI Emoji,Apple Color Emoji,sans-serif">⚙️</text>
+  <circle cx="1120" cy="60" r="60" fill="none" stroke="#d163a7" stroke-width="1" opacity="0.12"/>
+  <circle cx="1120" cy="60" r="40" fill="none" stroke="#d163a7" stroke-width="1" opacity="0.08"/>
+  <circle cx="1140" cy="250" r="35" fill="none" stroke="#a12c7b" stroke-width="1" opacity="0.10"/>
+  <text x="180" y="100" font-size="13" font-family="'Segoe UI',system-ui,sans-serif" fill="#d163a7" opacity="0.7" font-weight="500" letter-spacing="3">SAMOTECH · OPEN SOURCE</text>
+  <text x="180" y="168" font-size="52" font-family="'Segoe UI',system-ui,sans-serif" fill="white" font-weight="700" letter-spacing="-0.5">AgentForge</text>
+  <text x="180" y="210" font-size="18" font-family="'Segoe UI',system-ui,sans-serif" fill="#9ca3af" font-weight="400">Mega AI Agent Platform · 10,000+ Modular Skills</text>
+  <rect x="180" y="218" width="120" height="2.5" rx="1.5" fill="url(#accent_grad)" opacity="0.7"/>
+  <text x="1180" y="276" font-size="12" font-family="'Segoe UI',system-ui,sans-serif" fill="#d163a7" opacity="0.4" text-anchor="end">github.com/SamoTech/agentforge</text>
+  <rect x="1050" y="24" width="120" height="28" rx="14" fill="#a12c7b" opacity="0.15"/>
+  <rect x="1050" y="24" width="120" height="28" rx="14" fill="none" stroke="#d163a7" stroke-width="1" opacity="0.3"/>
+  <text x="1110" y="43" font-size="12" font-family="'Segoe UI',system-ui,sans-serif" fill="#d163a7" text-anchor="middle" font-weight="600" opacity="0.85">Open Source</text>
+</svg>
